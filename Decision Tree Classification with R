@@ -1,0 +1,105 @@
+library(dplyr)
+library(corrplot)
+library(ggplot2)
+library(apaTables)
+library(party)
+library(sandwich)#
+#----Reading the dataset Absenteeism at work into R------------------------
+abs_data<- read.csv("Absenteeism_at_work.csv", header = TRUE)
+str(abs_data)
+summary(abs_data)
+range(abs_data$Reason.for.absence)
+
+#This is to remove the Reason.for.absence values that are not valid
+abs_data_remove_invalid <- abs_data[!(abs_data$Reason.for.absence == 0),]
+
+
+#This is to filter out observations where Absenteeism.time.in.hours is equal to zero
+abs_data_subset <- subset(abs_data_remove_invalid, Absenteeism.time.in.hours <= 0 & Reason.for.absence > 0, c(ID, Reason.for.absence, Absenteeism.time.in.hours))
+#abs_data3 <- subset(abs_data1, Absenteeism.time.in.hours <= 0 & Reason.for.absence == 0, c(ID, Reason.for.absence, Absenteeism.time.in.hours))
+#as.matrix(rbind(a,b))
+
+abs_data_processed <- abs_data_remove_invalid[!(abs_data_remove_invalid$Absenteeism.time.in.hours == 0 & abs_data_remove_invalid$Reason.for.absence > 0),]
+
+
+#-----Creating Reason.for.absence into groups: ICD(1 - 21 = 0) and Without ICD(22 -28 = 1)-----------
+
+abs_data_processed$Cat.Reason.for.absence <- abs_data_processed$Reason.for.absence > 21
+
+abs_data_processed$Cat.Reason.for.absence <- as.numeric(abs_data_processed$Cat.Reason.for.absence)
+
+#-----------------------------------------------------------------------------------
+
+str(abs_data_processed)
+
+range(abs_data_processed$Disciplinary.failure)
+#It was discovered that all values of Disciplinary.failure is Zero
+#The code below removes the attribute Disciplinary failure because all the values are zero and are not relevant to the analysis
+abs_data_processed <- abs_data_processed[,-12]
+
+#Checking for missing values in the attributes
+as.matrix(colSums(is.na(abs_data_processed)))
+
+#Processed dataset ready for classification
+nrow(abs_data_processed)
+ncol(abs_data_processed)
+dim(abs_data_processed)
+names(abs_data_processed)
+
+#Using as.factor function to convert reason.for.absenteeism to a factor column
+abs_data_processed$Cat.Reason.for.absence_new <- as.factor(abs_data_processed$Cat.Reason.for.absence)
+str(abs_data_processed)
+
+# Checking the data type of the new additional attribute to the dataset (Cat.Reason.for.absence_new)
+str(abs_data_processed)
+
+
+#Processed dataset ready for classification
+nrow(abs_data_processed)
+ncol(abs_data_processed)
+dim(abs_data_processed)
+
+#Dividing the data in a ratio 80% Training and 20% Validation to implement the trees
+set.seed(12345)
+
+
+pd <- sample(2, nrow(abs_data_processed), replace = TRUE, prob = c(0.8,0.2))
+train <- abs_data_processed[pd == 1,]
+validate <- abs_data_processed[pd == 2,]
+pd
+dim(train)
+dim(validate)
+
+
+#using the train dataset with all the independent variables
+abs_data_tree <- ctree(Cat.Reason.for.absence_new ~ Month.of.absence + Day.of.the.week	+ Seasons + Transportation.expense + Distance.from.Residence.to.Work + Service.time + Age + Work.load.Average.day + Hit.target + Education + Son + Social.drinker + Social.smoker + Pet + Weight	+ Height + Body.mass.index + Absenteeism.time.in.hours, data = train)
+
+abs_data_tree
+plot(abs_data_tree)
+#plot(abs_data_tree, type="simple")
+
+#--------------------------------------------------------------------------
+
+predict(abs_data_tree)
+predict_freq <- table(predict(abs_data_tree), train$Cat.Reason.for.absence_new)
+predict_freq
+
+
+#-------------------------------------------------------------------------
+#To calculate the classification accuracy and error on the train data
+sum(diag(predict_freq))/sum(predict_freq)
+1 - sum(diag(predict_freq))/sum(predict_freq)
+#--------------------------------------------------------------------------
+
+
+
+#-------------------------------------------------------------------------------
+#Model Validation: Test data prediction for all independent variables
+predict_test <- table(predict(abs_data_tree, newdata = validate), validate$Cat.Reason.for.absence_new)
+predict_test
+sum(diag(predict_test))/sum(predict_test)
+1- sum(diag(predict_test))/sum(predict_test)
+#-------------------------------------------------------------------------------
+#
+#---------End of Classification-----------------------------
+
